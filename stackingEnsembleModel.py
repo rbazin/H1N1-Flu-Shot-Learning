@@ -70,8 +70,14 @@ def data_clean(data, numerical_list, categorical_list):
 LABELS_TRAINING_PATH = os.path.join("data", "training_set_labels.csv")
 FEATURES_TRAINING_PATH = os.path.join("data", "training_set_features.csv")
 BEST_PARAMS_PATH = os.path.join("models", "best_params_skmultilearn.save")
-VOTE_H1N1_PATH = os.path.join("models", "vote_h1n1_clf.save")
-VOTE_SEASONAL_PATH = os.path.join("models", "vote_seasonal_clf.save")
+VOTE_H1N1_PATH = os.path.join("models", "vote_h1n1_clf_chain.save")
+VOTE_SEASONAL_PATH = os.path.join("models", "vote_seasonal_clf_chain.save")
+# the alt chain is : first predict seasonal then h1n1
+VOTE_H1N1_PATH_ALT = os.path.join("models", "vote_h1n1_clf_alt_chain.save")
+# the alt chain is : first predict seasonal then h1n1
+VOTE_SEASONAL_PATH_ALT = os.path.join(
+    "models", "vote_seasonal_clf_alt_chain.save")
+
 
 # On charge les données
 features = pd.read_csv(FEATURES_TRAINING_PATH, sep=",", header=0)
@@ -121,30 +127,66 @@ models = [
     ('svc', SVC(probability=True, kernel="poly", degree=3)),
     ('gsb', GaussianNB()),
 ]
+# Premier maillon de la chaine qui va prédire 'seasonal_vaccine'
+vote_clf_seasonal = StackingClassifier(
+    estimators=models,
+    final_estimator=LogisticRegression(),
+    cv=3,
+    n_jobs=-1,
+    verbose=0
+)
 
-cv = RepeatedStratifiedKFold(n_splits=10, n_repeats=3, random_state=1)
+vote_clf_seasonal.fit(X_train, Y_train[:, 1])
+joblib.dump(vote_clf_seasonal, VOTE_SEASONAL_PATH_ALT)
 
-# Premier maillon de la chaine qui va prédire 'h1n1_vaccine'
+# On prépare les donées d'entrainnement pour le deuxième maillon de la chaine
+clf_seasonal_pred = vote_clf_seasonal.predict_proba(X_train_scaled)[:, 1]
+X_train_h1n1_scaled = np.c_[X_train_scaled, clf_seasonal_pred]
+
+
+# Deuxieme maillon de la chaine qui va prédire 'h1n1_vaccine'
 vote_clf_h1n1 = StackingClassifier(
     estimators=models,
     final_estimator=LogisticRegression(),
-    cv=cv,
+    cv=3,
+    n_jobs=-1,
+    verbose=0
+)
+
+vote_clf_h1n1.fit(X_train_h1n1_scaled, Y_train[:, 0])
+joblib.dump(vote_clf_h1n1, VOTE_H1N1_PATH_ALT)
+
+
+# Prédictions
+clf_seasonal_pred = vote_clf_seasonal.predict_proba(X_test_scaled)[:, 1]
+X_test_h1n1_scaled = np.c_[X_test_scaled, clf_seasonal_pred]
+clf_h1n1_pred = vote_clf_h1n1.predict_proba(X_test_h1n1_scaled)[:, 1]
+pred = np.c_[clf_h1n1_pred, clf_seasonal_pred]
+
+print('ROC AUC :', roc_auc_score(Y_test, pred))
+
+# Chaine inversée maintenant
+vote_clf_h1n1 = StackingClassifier(
+    estimators=models,
+    final_estimator=LogisticRegression(),
+    cv=3,
     n_jobs=-1,
 )
 
-vote_clf_h1n1.fit(X_train_scaled, Y_train[:, 0])
+vote_clf_h1n1.fit(X_train, Y_train[:, 0])
 joblib.dump(vote_clf_h1n1, VOTE_H1N1_PATH)
 
 # On prépare les donées d'entrainnement pour le deuxième maillon de la chaine
 clf_h1n1_pred = vote_clf_h1n1.predict_proba(X_train_scaled)[:, 1]
 X_train_seasonal_scaled = np.c_[X_train_scaled, clf_h1n1_pred]
 
-# Deuxième maillon de la chaine qui va prédire 'seasonal_vaccine'
+
 vote_clf_seasonal = StackingClassifier(
     estimators=models,
     final_estimator=LogisticRegression(),
-    cv=cv,
+    cv=3,
     n_jobs=-1,
+    verbose=0
 )
 
 vote_clf_seasonal.fit(X_train_seasonal_scaled, Y_train[:, 1])
@@ -155,7 +197,6 @@ clf_h1n1_pred = vote_clf_h1n1.predict_proba(X_test_scaled)[:, 1]
 X_test_seasonal_scaled = np.c_[X_test_scaled, clf_h1n1_pred]
 clf_seasonal_pred = vote_clf_seasonal.predict_proba(
     X_test_seasonal_scaled)[:, 1]
-
-pred = np.c[clf_h1n1_pred, clf_seasonal_pred]
+pred = np.c_[clf_h1n1_pred, clf_seasonal_pred]
 
 print('ROC AUC :', roc_auc_score(Y_test, pred))
