@@ -11,9 +11,7 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 
-from sklearn.ensemble import StackingClassifier
-
-from sklearn.impute import SimpleImputer
+from cleanFunctions import *
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import train_test_split
@@ -21,50 +19,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.model_selection import GridSearchCV
 
 
-# Fonctions de traintement des donnees
-
-def numerical_impute(data, numerical_list):
-    imputer_numerical = SimpleImputer(
-        strategy='constant', fill_value=-1, missing_values=np.nan)
-    data_numerical = data.loc[:, numerical_list]
-    data_numerical_imputed = imputer_numerical.fit_transform(data_numerical)
-    data_numerical_imputed = pd.DataFrame(
-        data_numerical_imputed, columns=numerical_list)
-    return data_numerical_imputed
-
-
-def categorical_imputing(data, categorical_list):
-    # Imputing
-    imputer_categorical = SimpleImputer(
-        strategy='constant', fill_value='missing', missing_values=np.nan)
-    data_categorical = data.loc[:, categorical_list]
-    data_categorical = imputer_categorical.fit_transform(data_categorical)
-    data_categorical_imputed = pd.DataFrame(
-        data_categorical, columns=categorical_list)
-    return data_categorical_imputed
-
-
-def categorical_impute_one_hot(data, categorical_list):
-    # Imputing
-    data_categorical_imputed = categorical_imputing(data, categorical_list)
-
-    # One hot encoding
-    data_one_hot = pd.get_dummies(data_categorical_imputed)
-
-    return data_one_hot
-
-
-def data_clean(data, numerical_list, categorical_list):
-    # Changer les listes de features et les fonctions correspondantes
-    data_categorical_encoded = categorical_impute_one_hot(
-        data, categorical_list)
-    data_numerical_imputed = numerical_impute(data, numerical_list)
-    data_imputed_encoded = pd.merge(
-        data_numerical_imputed, data_categorical_encoded, left_index=True, right_index=True)
-
-    return data_imputed_encoded
-
-
+# Fonction de prédiction probabiliste
 def predict_proba_all_models(models, data):
 
     pred = models[0].predict_proba(data)[:, 1]
@@ -73,9 +28,8 @@ def predict_proba_all_models(models, data):
 
     return pred
 
-# Fonction d'entrainnement
 
-
+# Fonction d'entrainnement des chaines
 def train_chains_model(models_and_params, data, labels, chain=1):
     h1n1 = labels[:, 0]
     seasonal = labels[:, 1]
@@ -193,7 +147,7 @@ categorical_list_ordinal = [
     k for k in categorical_list if k not in categorical_list_one_hot]
 numerical_list = [k for k in features_list if k not in categorical_list]
 
-#
+# Données d'entrainnement et de test
 labels.drop("respondent_id", inplace=True, axis=1)
 Y = labels.to_numpy()
 X = data_clean(data, numerical_list, categorical_list).to_numpy()
