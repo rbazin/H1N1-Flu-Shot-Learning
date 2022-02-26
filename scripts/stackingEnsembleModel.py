@@ -106,8 +106,78 @@ def train_chains_model(models_and_params, data, labels, chain=1):
         full_pred = np.c_[pred_h1n1, pred_seasonal]
         print("RocAucScore on training data :",
               roc_auc_score(labels, full_pred))
-    else:
-        print("Argument error")
+
+    elif chain == 2:
+        print("Training the second chain : seasonal -> seasonal")
+        # We train the seasonal part
+        print("Training models for seasonal label")
+        for model_and_params in models_and_params:
+
+            name = model_and_params['name']
+            print("Training model :", name)
+            model = model_and_params['model']
+            param_grid = model_and_params['param_grid']
+            grid_clf = GridSearchCV(model, param_grid, cv=5,
+                                    scoring='roc_auc', n_jobs=-1, verbose=1)
+            grid_clf.fit(data, seasonal)
+            trained_models_seasonal.append(grid_clf)
+            joblib.dump(grid_clf, os.path.join(
+                CHAIN1_SEASONAL_PATH, "{}.save".format(name)))
+            print("Model :", name, "trained and saved")
+
+        # We gather the predictions of all the models trained
+        pred_seasonal_all_models = predict_proba_all_models(
+            trained_models_seasonal, data)
+
+        # The stacking model is a regression but it could be otherwise
+        stack_seasonal = LogisticRegression()
+
+        # We train the stacking model on the predictions of the base models and seasonal
+        print("Training stacking model for seasonal")
+        stack_seasonal.fit(pred_seasonal_all_models, seasonal)
+        joblib.dump(stack_seasonal, os.path.join(
+            CHAIN1_SEASONAL_PATH, "stacking_seasonal.save"))
+        print("Model : stacking seasonal trained and saved")
+
+        # We add the prediction of the stacking model to the data so it's used in the next step of the chain
+        pred_seasonal = stack_seasonal.predict_proba(
+            pred_seasonal_all_models)[:, 1]
+        data = np.c_[data, pred_seasonal]
+
+        # We train the h1n1 part
+        print("Training models for h1n1 label")
+        for model_and_params in models_and_params:
+            name = model_and_params['name']
+            print("Training model :", name)
+            model = model_and_params['model']
+            param_grid = model_and_params['param_grid']
+            grid_clf = GridSearchCV(model, param_grid, cv=5,
+                                    scoring='roc_auc', n_jobs=-1, verbose=1)
+            grid_clf.fit(data, h1n1)
+            trained_models_h1n1.append(grid_clf)
+            joblib.dump(grid_clf, os.path.join(
+                CHAIN1_H1N1_PATH, "{}.save".format(name)))
+            print("Model :", name, "trained and saved")
+
+        # We gather the predictions of all the models trained
+        pred_h1n1_all_models = predict_proba_all_models(
+            trained_models_h1n1, data)
+
+        stack_h1n1 = LogisticRegression()
+
+        print("Training stacking model for h1n1")
+        stack_h1n1.fit(pred_h1n1_all_models, h1n1)
+        joblib.dump(stack_h1n1, os.path.join(
+            CHAIN1_H1N1_PATH, "stacking_h1n1.save"))
+        print("Model : stacking h1n1 trained and saved")
+
+        pred_h1n1 = stack_h1n1.predict_proba(
+            pred_h1n1_all_models)[:, 1]
+
+        # Testing the roc_auc_score on training data
+        full_pred = np.c_[pred_h1n1, pred_seasonal]
+        print("RocAucScore on training data :",
+              roc_auc_score(labels, full_pred))
 
 
 # Chemin vers les données et le nom du fichier de sortie
