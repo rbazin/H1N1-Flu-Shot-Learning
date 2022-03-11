@@ -1,5 +1,1 @@
-training_set_labels.csv : wget https://bashupload.data-ensta.fr/WCs5v/uvTAm.csv
-training_set_features.csv : wget https://bashupload.data-ensta.fr/qQYNS/bgfNv.csv
-test_set_features.csv : wget https://bashupload.data-ensta.fr/E-Q-a/oetsd.csv 
-featuresGeneration.py : wget https://bashupload.data-ensta.fr/RyCqX/mhRLp.py
-skmutlilearn... : wget https://bashupload.data-ensta.fr/hzIpP/V0jjs.py
+GitHub token : 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
